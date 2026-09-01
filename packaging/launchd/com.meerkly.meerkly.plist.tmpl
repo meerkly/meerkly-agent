@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Reference copy of the LaunchAgent `meerkly service install` generates.
+  %EXE% and %LOG_DIR% are filled in at install time; src/service/launchd.rs is
+  the source of truth. It is a LaunchAgent, not a LaunchDaemon: it runs as the
+  installing user, so the config stays in that user's home. The trade-off is
+  that it starts at login rather than at boot.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.meerkly.meerkly</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>%EXE%</string>
+    <string>run</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>MEERKLY_LOG</key><string>info</string>
+  </dict>
+  <key>StandardOutPath</key><string>%LOG_DIR%/meerkly.log</string>
+  <key>StandardErrorPath</key><string>%LOG_DIR%/meerkly.log</string>
+</dict>
+</plist>

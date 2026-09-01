@@ -1,0 +1,44 @@
+# The meerkly agent. The repository is `meerkly-agent`; everything a user ever
+# types is just `meerkly` — the crate, the binary, the Homebrew formula, the deb
+# package and the service unit.
+#
+# Versioned independently of the SDKs: those share one synced number driven by
+# the monorepo's Cargo workspace, this is a product with its own release cadence.
+[package]
+name = "meerkly"
+version = "0.1.0"
+edition = "2021"
+description = "The meerkly agent — a background service that shares this machine's connection as a proxy exit node and earns per GB."
+authors = ["Meerkly"]
+
+publish = true
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/meerkly/meerkly-agent"
+homepage = "https://meerkly.com"
+readme = "README.md"
+keywords = ["meerkly", "proxy", "daemon", "bandwidth", "agent"]
+categories = ["command-line-utilities", "network-programming"]
+rust-version = "1.75"
+
+[[bin]]
+name = "meerkly"
+path = "src/main.rs"
+
+[dependencies]
+meerkly-sdk = "0.3"
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+directories = "6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+toml = "0.9"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+opt-level = 2
+strip = true

@@ -1,0 +1,52 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # Lint and test on one runner; the cross-platform question is "does it build",
+  # answered by the matrix below.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --all --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+
+  # Every target a release ships. A packaging change that breaks one platform
+  # should fail here, not at tag time.
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-latest, target: x86_64-unknown-linux-musl }
+          - { runner: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl }
+          - { runner: macos-14, target: aarch64-apple-darwin }
+          - { runner: macos-14, target: x86_64-apple-darwin }
+          - { runner: windows-latest, target: x86_64-pc-windows-msvc }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: musl toolchain
+        if: contains(matrix.target, 'musl')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - run: cargo build --release --target ${{ matrix.target }}
+
+  # The installer is a shipped artifact; a syntax error in it is a broken
+  # `curl … | sh` for everyone.
+  installer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - run: sh -n packaging/install.sh
+      - run: shellcheck -s sh packaging/install.sh packaging/postinstall.sh packaging/preremove.sh

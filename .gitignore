@@ -1,0 +1,5 @@
+/target
+/dist
+
+# Local-only SDK path override; see the README.
+/.cargo

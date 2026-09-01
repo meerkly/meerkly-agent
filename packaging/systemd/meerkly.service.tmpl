@@ -1,0 +1,29 @@
+# Reference copy of the unit `meerkly service install` generates.
+# %USER%, %HOME% and %EXE% are filled in at install time; see
+# src/service/systemd.rs, which is the source of truth.
+[Unit]
+Description=meerkly agent — shares this machine's connection as a proxy exit node
+Documentation=https://meerkly.com
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%USER%
+Environment=HOME=%HOME%
+Environment=MEERKLY_LOG=info
+ExecStart=%EXE% run
+Restart=always
+RestartSec=5
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%HOME%/.config/meerkly %HOME%/.local/state/meerkly
+ProtectControlGroups=yes
+ProtectKernelTunables=yes
+RestrictSUIDSGID=yes
+
+[Install]
+WantedBy=multi-user.target

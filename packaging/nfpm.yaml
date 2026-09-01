@@ -1,0 +1,26 @@
+# .deb and .rpm, built by release.yml with nfpm. The package is `meerkly`, not
+# `meerkly-agent` — the repository has the longer name, everything a user types
+# is short.
+name: meerkly
+arch: ${ARCH}
+platform: linux
+version: ${VERSION}
+section: net
+priority: optional
+maintainer: Meerkly <hello@meerkly.com>
+description: |
+  Share this machine's connection as a meerkly proxy exit node.
+  Runs as a background service and earns per GB shared.
+vendor: Meerkly
+homepage: https://meerkly.com
+license: MIT OR Apache-2.0
+
+contents:
+  - src: ./dist/meerkly
+    dst: /usr/bin/meerkly
+  - src: ./README.md
+    dst: /usr/share/doc/meerkly/README.md
+
+scripts:
+  postinstall: ./packaging/postinstall.sh
+  preremove: ./packaging/preremove.sh

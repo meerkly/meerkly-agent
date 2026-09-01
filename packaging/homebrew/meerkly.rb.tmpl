@@ -1,0 +1,60 @@
+# Rendered by release.yml and pushed to meerkly/homebrew-tap as Formula/meerkly.rb.
+# %VERSION% and the four %SHA_*% checksums are filled in from the release artifacts.
+class Meerkly < Formula
+  desc "Share this machine's connection as a meerkly proxy exit node"
+  homepage "https://meerkly.com"
+  version "%VERSION%"
+  license any_of: ["MIT", "Apache-2.0"]
+
+  on_macos do
+    on_arm do
+      url "https://github.com/meerkly/meerkly-agent/releases/download/v%VERSION%/meerkly-%VERSION%-aarch64-apple-darwin.tar.gz"
+      sha256 "%SHA_MACOS_ARM%"
+    end
+    on_intel do
+      url "https://github.com/meerkly/meerkly-agent/releases/download/v%VERSION%/meerkly-%VERSION%-x86_64-apple-darwin.tar.gz"
+      sha256 "%SHA_MACOS_X86%"
+    end
+  end
+
+  on_linux do
+    on_arm do
+      url "https://github.com/meerkly/meerkly-agent/releases/download/v%VERSION%/meerkly-%VERSION%-aarch64-unknown-linux-musl.tar.gz"
+      sha256 "%SHA_LINUX_ARM%"
+    end
+    on_intel do
+      url "https://github.com/meerkly/meerkly-agent/releases/download/v%VERSION%/meerkly-%VERSION%-x86_64-unknown-linux-musl.tar.gz"
+      sha256 "%SHA_LINUX_X86%"
+    end
+  end
+
+  def install
+    bin.install "meerkly"
+  end
+
+  # A per-user LaunchAgent: it runs as whoever ran `brew services start`, which
+  # is what keeps the config file in that user's home and out of sudo's way.
+  # `sudo brew services` would make it a root LaunchDaemon — don't.
+  service do
+    run [opt_bin/"meerkly", "run"]
+    keep_alive true
+    log_path var/"log/meerkly.log"
+    error_log_path var/"log/meerkly.log"
+    environment_variables MEERKLY_LOG: "info"
+  end
+
+  def caveats
+    <<~EOS
+      Set your publisher id, then start it:
+
+        meerkly config set publisher-id pub_…
+        brew services start meerkly
+
+      Get a publisher id at https://dashboard.meerkly.com
+    EOS
+  end
+
+  test do
+    assert_match version.to_s, shell_output("#{bin}/meerkly --version")
+  end
+end
