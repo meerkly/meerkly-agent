@@ -494,6 +494,8 @@ dependencies = [
 [[package]]
 name = "meerkly-protocol"
 version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a40c44b736ef77231f73a07e71966479d3c0410460011e0791ffdb92e96bc1d3"
 dependencies = [
  "serde",
  "serde_json",
@@ -504,6 +506,8 @@ dependencies = [
 [[package]]
 name = "meerkly-sdk"
 version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "99a355637170c4ae17a17d1b5c6e30d27c097f0f86659413887a6500e3186ec3"
 dependencies = [
  "anyhow",
  "meerkly-protocol",
