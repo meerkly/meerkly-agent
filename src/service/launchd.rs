@@ -12,7 +12,11 @@ use super::{binary_path, run_command, ServiceManager, ServiceState};
 use anyhow::{Context, Result};
 use std::path::PathBuf;
 
-const LABEL: &str = "com.meerkly.meerkly";
+// `agent`, not `meerkly`: the desktop app takes `com.meerkly.app`, and two
+// products from one vendor need distinct reverse-DNS labels — launchd keys its
+// whole namespace on this, so a collision would have one silently displace the
+// other.
+const LABEL: &str = "com.meerkly.agent";
 
 pub struct Manager {
     plist_path: PathBuf,

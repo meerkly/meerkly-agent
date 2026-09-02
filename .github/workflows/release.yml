@@ -157,8 +157,15 @@ jobs:
           git config user.name "meerkly-bot"
           git config user.email "bot@meerkly.com"
           git add Formula/meerkly.rb
-          git commit -m "meerkly ${{ needs.version.outputs.version }}"
-          git push
+          # Re-running a release for an unchanged version renders an identical
+          # formula, and `git commit` with nothing staged exits non-zero — which
+          # would fail a release that had in fact succeeded.
+          if git diff --staged --quiet; then
+            echo "formula already at ${{ needs.version.outputs.version }} — nothing to push"
+          else
+            git commit -m "meerkly ${{ needs.version.outputs.version }}"
+            git push
+          fi
 
   # `cargo install meerkly` — a fourth install path, and the check that the
   # published SDK really is consumable from crates.io with no local checkout.

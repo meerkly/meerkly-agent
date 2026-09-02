@@ -13,9 +13,9 @@ use clap::{Parser, Subcommand};
     version,
     about = "Share this machine's connection as a meerkly proxy exit node.",
     long_about = "The meerkly agent runs in the background and shares this machine's connection \
-                  as a proxy exit node, earning per GB shared.\n\nFirst run:\n  meerkly config \
-                  set publisher-id pub_…\n  sudo meerkly service install\n\nGet a publisher id at \
-                  https://dashboard.meerkly.com"
+                  as a proxy exit node, earning per GB shared.\n\nFirst run:\n    sudo meerkly \
+                  init\n\nThat asks for your publisher id, then installs and starts the \
+                  background service. Get an id at https://dashboard.meerkly.com"
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -24,6 +24,27 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
+    /// Set this machine up from scratch: publisher id, then the service.
+    ///
+    /// The one command a new user needs.
+    Init {
+        /// Your publisher id. Prompted for when omitted.
+        #[arg(value_name = "pub_…")]
+        id: Option<String>,
+        /// Store the id but do not install the service.
+        #[arg(long)]
+        no_service: bool,
+    },
+
+    /// Store the publisher id that earns what this machine shares.
+    ///
+    /// Prompts when no id is given, so `meerkly login` on its own is enough.
+    Login {
+        /// Your publisher id. Prompted for when omitted.
+        #[arg(value_name = "pub_…")]
+        id: Option<String>,
+    },
+
     /// Run in the foreground. This is what the service executes.
     Run {
         /// Use this publisher id instead of the configured one.

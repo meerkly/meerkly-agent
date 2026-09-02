@@ -23,6 +23,8 @@ use status::Status;
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
+        Command::Init { id, no_service } => cmd_init(id, no_service),
+        Command::Login { id } => cmd_login(id),
         Command::Run {
             publisher_id,
             gateway,
@@ -38,6 +40,90 @@ fn main() -> Result<()> {
         }
         Command::Status { json } => cmd_status(json),
         Command::Config(c) => cmd_config(c),
+    }
+}
+
+// ---- first run -------------------------------------------------------------
+
+/// Everything a new machine needs, in one command.
+fn cmd_init(id: Option<String>, no_service: bool) -> Result<()> {
+    let path = save_publisher_id(id)?;
+    if no_service {
+        println!();
+        println!("Install the service when you are ready:  meerkly service install");
+        return Ok(());
+    }
+
+    println!();
+    let m = manager(None)?;
+    m.install().with_context(|| {
+        format!(
+            "stored your publisher id in {}, but could not install the service",
+            path.display()
+        )
+    })?;
+    println!("meerkly is running.");
+    println!("  {}", m.native_hint());
+    println!();
+    println!("Check on it any time with:  meerkly status");
+    Ok(())
+}
+
+fn cmd_login(id: Option<String>) -> Result<()> {
+    save_publisher_id(id)?;
+    // A running service read its config at startup, so it is still using the old
+    // id until it restarts.
+    after_write(false)?;
+    Ok(())
+}
+
+/// Resolve a publisher id — from the argument, or by asking — and store it.
+fn save_publisher_id(id: Option<String>) -> Result<std::path::PathBuf> {
+    let path = paths::config_file()?;
+    let mut config = Config::load(&path)?;
+
+    let id = match id {
+        Some(given) => config::validate_publisher_id(&given)?,
+        None => prompt_for_publisher_id(config.publisher_id.as_deref())?,
+    };
+
+    config.publisher_id = Some(id.clone());
+    config.save(&path)?;
+    println!("publisher id {id} stored in {}", path.display());
+    Ok(path)
+}
+
+/// Ask for the id, re-asking on a typo rather than making the user start over.
+///
+/// Refuses when there is no terminal: a non-interactive caller (a script, the
+/// desktop app, a Dockerfile) must pass the id, and hanging on a read that can
+/// never be answered would be worse than failing.
+fn prompt_for_publisher_id(current: Option<&str>) -> Result<String> {
+    use std::io::{IsTerminal, Write};
+
+    anyhow::ensure!(
+        std::io::stdin().is_terminal(),
+        "no publisher id given, and there is no terminal to ask on.\n\n  Pass it \
+         directly:\n    meerkly login pub_…\n\n  Get one at https://dashboard.meerkly.com"
+    );
+
+    println!("Find your publisher id at https://dashboard.meerkly.com");
+    if let Some(current) = current {
+        println!("Currently configured: {current}");
+    }
+
+    loop {
+        print!("publisher id (pub_…): ");
+        std::io::stdout().flush()?;
+
+        let mut line = String::new();
+        if std::io::stdin().read_line(&mut line)? == 0 {
+            anyhow::bail!("cancelled — nothing was changed");
+        }
+        match config::validate_publisher_id(&line) {
+            Ok(id) => return Ok(id),
+            Err(e) => eprintln!("  {e}\n"),
+        }
     }
 }
 
@@ -170,7 +256,7 @@ fn cmd_config(command: ConfigCommand) -> Result<()> {
                 Ok(text) => print!("{text}"),
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                     println!("# no configuration yet: {}", path.display());
-                    println!("# create one with: meerkly config set publisher-id pub_…");
+                    println!("# create one with: meerkly init");
                 }
                 Err(e) => return Err(e).context(format!("cannot read {}", path.display())),
             }

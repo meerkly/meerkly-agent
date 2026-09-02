@@ -133,7 +133,7 @@ info "installed $BIN_DIR/meerkly"
 
 # ---- configure and start -----------------------------------------------------
 
-"$BIN_DIR/meerkly" config set publisher-id "$PUBLISHER_ID" >/dev/null
+"$BIN_DIR/meerkly" login "$PUBLISHER_ID" >/dev/null
 info "publisher id stored in $("$BIN_DIR/meerkly" config path)"
 
 if [ "$INSTALL_SERVICE" = "1" ]; then

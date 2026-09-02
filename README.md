@@ -20,13 +20,13 @@ brew install meerkly/tap/meerkly
 **Debian / Ubuntu**
 
 ```bash
-sudo apt install ./meerkly_0.1.0_amd64.deb
+sudo apt install ./meerkly_1.0.0_amd64.deb
 ```
 
 **Fedora / RHEL**
 
 ```bash
-sudo dnf install ./meerkly-0.1.0.x86_64.rpm
+sudo dnf install ./meerkly-1.0.0.x86_64.rpm
 ```
 
 **One-liner** (downloads, configures and starts)
@@ -47,12 +47,23 @@ cargo install meerkly
 ## Getting started
 
 ```bash
-meerkly config set publisher-id pub_…   # from https://dashboard.meerkly.com
-sudo meerkly service install            # register and start the background service
-meerkly status
+sudo meerkly init
 ```
 
-A publisher id is a **public identifier, not a secret**. It says which account earns the
+That is the whole setup: it asks for your publisher id, stores it, and installs and starts the
+background service. Pass the id instead of being asked with `meerkly init pub_…`, and skip the
+service with `--no-service`. (`sudo` is only needed on Linux, to register the systemd unit — the
+service still runs as you.)
+
+Then, any time:
+
+```bash
+meerkly status
+meerkly login pub_…    # change which account earns what this machine shares
+```
+
+Get a publisher id at [dashboard.meerkly.com](https://dashboard.meerkly.com). It is a
+**public identifier, not a secret**. It says which account earns the
 bandwidth this machine shares, and grants access to nothing.
 
 ## Running it
@@ -97,11 +108,14 @@ publisher_id = "pub_XXXXXXXXXXXXXXXXXXXXXXXX"
 Edit it by hand, or:
 
 ```bash
-meerkly config set publisher-id pub_…
+meerkly login pub_…                     # the publisher id, with validation
 meerkly config set log debug --restart
 meerkly config show
 meerkly config path
 ```
+
+`meerkly login` is `config set publisher-id` with a prompt and a friendlier name; `config set`
+remains the low-level way to reach every other setting.
 
 Settings resolve **CLI flag → environment → config file → default**. The environment names are
 `MEERKLY_PUBLISHER_ID`, `MEERKLY_GATEWAY_ADDRESSES`, `MEERKLY_CA_CERT_PATH`, `MEERKLY_LOG` and
@@ -128,7 +142,7 @@ meerkly status --json
     "client_key": "…",
     "uptime_seconds": 3600,
     "pid": 4211,
-    "version": "0.1.0"
+    "version": "1.0.0"
   }
 }
 ```
@@ -157,6 +171,7 @@ meerkly-sdk = { path = "../meerkly/crates/client-core" }
 To test against a local gateway rather than production:
 
 ```bash
+meerkly login pub_devtest123
 meerkly config set gateway-addresses 127.0.0.1:4443
 meerkly config set ca-cert-path ../meerkly/certs/dev/ca.crt
 ```

@@ -119,10 +119,9 @@ impl Resolved {
             .or(file.publisher_id)
             .with_context(|| {
                 format!(
-                    "no publisher id configured.\n\n  Set one with:\n    meerkly config set \
-                     publisher-id pub_…\n\n  Create a publisher id at \
-                     https://dashboard.meerkly.com — it is a public identifier, not a \
-                     secret.\n  Config file: {}",
+                    "no publisher id configured.\n\n  Set one up with:\n    meerkly \
+                     init\n\n  Create a publisher id at https://dashboard.meerkly.com — it is a \
+                     public identifier, not a secret.\n  Config file: {}",
                     source.display()
                 )
             })?;
@@ -301,7 +300,7 @@ mod tests {
         let error = Resolved::from_parts(Config::default(), "/tmp/config.toml".into(), &|_| None)
             .unwrap_err()
             .to_string();
-        assert!(error.contains("meerkly config set publisher-id"), "{error}");
+        assert!(error.contains("meerkly init"), "{error}");
     }
     /// The environment beats the file; the file beats the default.
     #[test]
