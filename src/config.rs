@@ -147,12 +147,17 @@ impl Resolved {
     }
 
     /// Hand the resolved settings to the SDK.
-    pub fn to_client_config(&self) -> ClientConfig {
+    pub fn to_client_config(&self, identity: &crate::device::DeviceIdentity) -> ClientConfig {
         let mut config = ClientConfig::new(&self.publisher_id);
         config.gateway_addresses = self.gateway_addresses.clone();
         // A path pins that specific CA (a development gateway); no path is the
         // production path — verify against the public roots.
         config.ca_cert = CaCert::from_opts(None, self.ca_cert_path.clone());
+        // Who this machine is. OS, architecture and the SDK's own version are
+        // the SDK's to report; `sdk` stays unset so it names itself ("rust").
+        config.device_id = Some(identity.device_id.clone());
+        config.device_name = identity.device_name.clone();
+        config.app = Some(identity.app.clone());
         config
     }
 }
@@ -187,6 +192,41 @@ pub fn split_addresses(raw: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The identity has to make it from the state file to the wire; this is the
+    /// one seam between them. `sdk` is deliberately left unset — the SDK knows
+    /// it is being driven from Rust and says so itself.
+    fn test_identity() -> crate::device::DeviceIdentity {
+        crate::device::DeviceIdentity {
+            device_id: "dev_test".into(),
+            device_name: None,
+            app: "meerkly-agent/test".into(),
+        }
+    }
+
+    #[test]
+    fn the_client_config_carries_the_device_identity() {
+        let resolved = Resolved {
+            publisher_id: "pub_abc".into(),
+            gateway_addresses: vec!["127.0.0.1:4443".into()],
+            ca_cert_path: None,
+            log: None,
+            source: PathBuf::from("/nowhere/config.toml"),
+        };
+        let identity = crate::device::DeviceIdentity {
+            device_id: "dev_1".into(),
+            device_name: Some("prod-fra-01".into()),
+            app: "meerkly-agent/9.9.9".into(),
+        };
+
+        let config = resolved.to_client_config(&identity);
+
+        assert_eq!(config.device_id.as_deref(), Some("dev_1"));
+        assert_eq!(config.device_name.as_deref(), Some("prod-fra-01"));
+        assert_eq!(config.app.as_deref(), Some("meerkly-agent/9.9.9"));
+        assert!(config.sdk.is_none());
+        assert_eq!(config.publisher_id, "pub_abc");
+    }
 
     /// The canonical rule, mirroring the dashboard's pairing-code parser.
     #[test]
@@ -292,7 +332,10 @@ mod tests {
         .unwrap();
         assert_eq!(resolved.gateway_addresses, vec!["gw.meerkly.com:4443"]);
         // No pinned CA means the production path: verify against public roots.
-        assert!(resolved.to_client_config().ca_cert.is_public_roots());
+        assert!(resolved
+            .to_client_config(&test_identity())
+            .ca_cert
+            .is_public_roots());
     }
 
     #[test]

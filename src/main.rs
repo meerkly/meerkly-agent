@@ -8,6 +8,7 @@
 
 mod cli;
 mod config;
+mod device;
 mod paths;
 mod run;
 mod service;
@@ -225,6 +226,7 @@ fn cmd_status(json: bool) -> Result<()> {
                 serde_json::to_value(&s.state)?.as_str().unwrap_or("?")
             );
             println!("publisher: {}", s.publisher_id);
+            println!("device:   {}", s.device_id);
             if let Some(gateway) = &s.gateway_id {
                 println!("gateway:  {gateway}");
             }

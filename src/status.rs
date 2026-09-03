@@ -36,12 +36,16 @@ impl From<meerkly_sdk::State> for ConnectionState {
 pub struct Status {
     pub state: ConnectionState,
     pub publisher_id: String,
+    /// This machine's persistent id — the row it appears as in the dashboard.
+    /// Stable across restarts and reconnects; see `device.rs`.
+    pub device_id: String,
     /// The gateway currently serving this node.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gateway_id: Option<String>,
-    /// The cluster-wide identity the gateway assigned. **Ephemeral** — every
-    /// reconnect yields a new one, because an exit node has no persistent device
-    /// identity by design.
+    /// The cluster-wide identity the gateway assigned to *this connection*.
+    /// **Ephemeral** — every reconnect yields a new one. The persistent identity
+    /// is `device_id`; this one is what keeps two concurrent connections from
+    /// one machine distinguishable.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_key: Option<String>,
     /// Seconds the daemon has been running — not seconds connected.

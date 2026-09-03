@@ -26,10 +26,19 @@ pub async fn run(config: Resolved, status_path: PathBuf) -> Result<()> {
     let started = Instant::now();
     // Registered before the first connect attempt, so a stop during startup lands.
     let mut shutdown = Shutdown::new()?;
-    let client = ProxyClient::new(config.to_client_config(), tokio::runtime::Handle::current())?;
+    // Minted on first run and stable after that. Loaded before the client
+    // exists so a failure here is a clear startup error, not a silent
+    // anonymous connection.
+    let identity = crate::device::DeviceIdentity::load(&crate::paths::device_id_file()?)?;
+    let client = ProxyClient::new(
+        config.to_client_config(&identity),
+        tokio::runtime::Handle::current(),
+    )?;
 
     info!(
         publisher_id = %config.publisher_id,
+        device_id = %identity.device_id,
+        device_name = ?identity.device_name,
         gateways = %config.gateway_addresses.join(", "),
         config = %config.source.display(),
         "starting the meerkly agent"
@@ -38,6 +47,7 @@ pub async fn run(config: Resolved, status_path: PathBuf) -> Result<()> {
     let mut state = Publisher {
         path: status_path,
         publisher_id: config.publisher_id.clone(),
+        device_id: identity.device_id.clone(),
         started,
         last_error: None,
     };
@@ -109,6 +119,7 @@ pub async fn run(config: Resolved, status_path: PathBuf) -> Result<()> {
 struct Publisher {
     path: PathBuf,
     publisher_id: String,
+    device_id: String,
     started: Instant,
     last_error: Option<String>,
 }
@@ -118,6 +129,7 @@ impl Publisher {
         let status = Status {
             state,
             publisher_id: self.publisher_id.clone(),
+            device_id: self.device_id.clone(),
             gateway_id: client.gateway_id(),
             client_key: client.client_key(),
             uptime_seconds: self.started.elapsed().as_secs(),

@@ -77,6 +77,12 @@ pub fn status_file() -> Result<PathBuf> {
     Ok(state_dir()?.join("status.json"))
 }
 
+/// This machine's persistent device id. State, not config: never hand-edited,
+/// never copied to another machine — see `device.rs` for why that matters.
+pub fn device_id_file() -> Result<PathBuf> {
+    Ok(state_dir()?.join("device_id"))
+}
+
 #[cfg(not(windows))]
 fn home_dir() -> Result<PathBuf> {
     // `$HOME` first so a systemd unit's `Environment=HOME=…` is authoritative:
