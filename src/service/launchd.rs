@@ -43,7 +43,7 @@ impl Manager {
         )
     }
 
-    fn plist_text(exe: &std::path::Path, log_dir: &std::path::Path) -> String {
+    fn plist_text(exe: &std::path::Path, log_dir: &std::path::Path, home: &str) -> String {
         format!(
             r#"<?xml version="1.0" encoding="UTF-8"?>
 <!-- Managed by meerkly. Regenerate with `meerkly service install`. -->
@@ -60,6 +60,12 @@ impl Manager {
   <key>KeepAlive</key><true/>
   <key>EnvironmentVariables</key>
   <dict>
+    <!-- launchd does not inherit the environment of whatever loaded this plist;
+         it supplies its own. Pinning HOME here is what guarantees the agent
+         resolves the SAME config file the person who installed it edits, rather
+         than whatever home launchd decides the job has. The systemd unit sets
+         it for the same reason. -->
+    <key>HOME</key><string>{home}</string>
     <key>MEERKLY_LOG</key><string>info</string>
   </dict>
   <key>StandardOutPath</key><string>{log}/meerkly.log</string>
@@ -76,12 +82,16 @@ impl Manager {
 impl ServiceManager for Manager {
     fn install(&self) -> Result<()> {
         let exe = binary_path()?;
+        // Resolved at install time, as the installing user — that is who the
+        // service runs as, so their home is the right one to bake in.
+        let home = std::env::var("HOME")
+            .context("cannot determine your home directory; $HOME is not set")?;
         let log_dir = crate::paths::state_dir()?;
         std::fs::create_dir_all(&log_dir)?;
         if let Some(dir) = self.plist_path.parent() {
             std::fs::create_dir_all(dir)?;
         }
-        std::fs::write(&self.plist_path, Manager::plist_text(&exe, &log_dir))
+        std::fs::write(&self.plist_path, Manager::plist_text(&exe, &log_dir, &home))
             .with_context(|| format!("cannot write {}", self.plist_path.display()))?;
 
         // Reloading a changed plist requires unloading first; a fresh install has
@@ -106,12 +116,21 @@ impl ServiceManager for Manager {
         Ok(())
     }
 
+    // load/unload rather than start/stop. `launchctl stop` only signals the
+    // running process, and `KeepAlive` means launchd relaunches it a moment
+    // later — so `meerkly stop` would report success while the agent kept
+    // running. Unloading is what actually stops a KeepAlive job, and it is what
+    // `brew services stop` does too.
     fn start(&self) -> Result<()> {
-        run_command("launchctl", &["start", LABEL]).map(|_| ())
+        run_command(
+            "launchctl",
+            &["load", "-w", &self.plist_path.to_string_lossy()],
+        )
+        .map(|_| ())
     }
 
     fn stop(&self) -> Result<()> {
-        run_command("launchctl", &["stop", LABEL]).map(|_| ())
+        run_command("launchctl", &["unload", &self.plist_path.to_string_lossy()]).map(|_| ())
     }
 
     fn state(&self) -> ServiceState {

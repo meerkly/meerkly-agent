@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Reference copy of the LaunchAgent `meerkly service install` generates.
-  %EXE% and %LOG_DIR% are filled in at install time; src/service/launchd.rs is
+  %EXE%, %HOME% and %LOG_DIR% are filled in at install time; src/service/launchd.rs is
   the source of truth. It is a LaunchAgent, not a LaunchDaemon: it runs as the
   installing user, so the config stays in that user's home. The trade-off is
   that it starts at login rather than at boot.
@@ -19,6 +19,11 @@
   <key>KeepAlive</key><true/>
   <key>EnvironmentVariables</key>
   <dict>
+    <!-- launchd supplies its own environment rather than inheriting from
+         whatever loaded this plist, so HOME is pinned to the installing user's
+         home: it is what makes the agent read the same config file that user
+         edits. The systemd unit sets it for the same reason. -->
+    <key>HOME</key><string>%HOME%</string>
     <key>MEERKLY_LOG</key><string>info</string>
   </dict>
   <key>StandardOutPath</key><string>%LOG_DIR%/meerkly.log</string>
