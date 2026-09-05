@@ -267,6 +267,17 @@ fi
 # edit. The service is then registered by root — and runs as you, because sudo
 # tells it who you are. Doing both under one `sudo` is how a root-owned config
 # ends up in a home directory.
+#
+# Which is exactly what 1.1.0's installer did, so a machine upgrading from it
+# has a config directory it cannot write to. Take it back first; a fresh
+# machine never enters this branch.
+if [ "$(id -u)" != "0" ] && have sudo; then
+  cfg_dir=$(dirname "$("$MEERKLY" config path)")
+  if [ -e "$cfg_dir" ] && [ ! -w "$cfg_dir" ]; then
+    info "taking $cfg_dir back from root (an older install left it there)…"
+    sudo chown -R "$(id -u):$(id -g)" "$cfg_dir"
+  fi
+fi
 "$MEERKLY" login "$PUBLISHER_ID"
 
 if [ "$INSTALL_SERVICE" = "1" ]; then
