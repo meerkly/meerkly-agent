@@ -6,7 +6,7 @@
 # the monorepo's Cargo workspace, this is a product with its own release cadence.
 [package]
 name = "meerkly"
-version = "1.2.0"
+version = "1.2.1"
 edition = "2021"
 description = "The meerkly agent — a background service that shares this machine's connection as a proxy exit node and earns per GB."
 authors = ["Meerkly"]
