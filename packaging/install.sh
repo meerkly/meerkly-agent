@@ -2,7 +2,10 @@
 # meerkly installer.
 #
 #   curl -fsSL https://meerkly.com/install | sh
-#   curl -fsSL https://meerkly.com/install | sh -s -- --id pub_…
+#   curl -fsSL https://meerkly.com/install | PUBLISHER_ID=pub_… sh
+#
+# The variable goes after the pipe, on the sh side: `PUBLISHER_ID=… curl … | sh`
+# would hand it to curl, which has no use for it, and sh would never see it.
 #
 # Installs through whatever package manager the machine already has — Homebrew
 # on macOS, apt on Debian and Ubuntu, dnf on Fedora and RHEL — so that upgrading
@@ -20,7 +23,9 @@ set -eu
 REPO="meerkly/meerkly-agent"
 TAP="meerkly/tap/meerkly"
 VERSION="${MEERKLY_VERSION:-latest}"
-PUBLISHER_ID="${MEERKLY_PUBLISHER_ID:-}"
+# MEERKLY_PUBLISHER_ID is the long-standing name; bare PUBLISHER_ID is accepted
+# because it is what a person reaching for a one-liner will type.
+PUBLISHER_ID="${MEERKLY_PUBLISHER_ID:-${PUBLISHER_ID:-}}"
 METHOD="${MEERKLY_METHOD:-auto}"
 INSTALL_SERVICE=1
 
@@ -40,10 +45,11 @@ usage() {
 meerkly installer.
 
   curl -fsSL https://meerkly.com/install | sh
+  curl -fsSL https://meerkly.com/install | PUBLISHER_ID=pub_... sh
   curl -fsSL https://meerkly.com/install | sh -s -- --id pub_...
 
 Options:
-  --id <pub_...>   publisher id; otherwise $MEERKLY_PUBLISHER_ID, otherwise asked
+  --id <pub_...>   publisher id; otherwise $PUBLISHER_ID, otherwise asked
   --version <v>    install a specific version instead of the latest
   --method <m>     auto (default), brew, apt, dnf or binary
   --no-service     install and configure, but do not start the background service
@@ -128,7 +134,7 @@ if [ -z "$PUBLISHER_ID" ] && [ -r /dev/tty ]; then
   printf 'publisher id (pub_…): '
   read -r PUBLISHER_ID < /dev/tty || true
 fi
-[ -n "$PUBLISHER_ID" ] || die "no publisher id given. Pass --id pub_… or set MEERKLY_PUBLISHER_ID."
+[ -n "$PUBLISHER_ID" ] || die "no publisher id given. Pass --id pub_… or set PUBLISHER_ID."
 case "$PUBLISHER_ID" in
   pub_*) ;;
   *) die "that does not look like a publisher id — expected a 'pub_' prefix" ;;

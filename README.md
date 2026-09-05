@@ -19,10 +19,17 @@ binary if it does not, then asks for your publisher id and starts the service.
 curl -fsSL https://meerkly.com/install | sh
 ```
 
-Non-interactively, or to skip the service:
+On a server, or anywhere nobody is at the keyboard, hand it the id and it will
+not prompt. The variable goes **after** the pipe — in front of `curl` it would
+go to curl, and `sh` would never see it:
 
 ```bash
-curl -fsSL https://meerkly.com/install | sh -s -- --id pub_your_publisher_id
+curl -fsSL https://meerkly.com/install | PUBLISHER_ID=pub_your_publisher_id sh
+```
+
+`--id pub_…` does the same thing as a flag, and `--help` lists the rest.
+
+```bash
 curl -fsSL https://meerkly.com/install | sh -s -- --help
 ```
 
