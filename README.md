@@ -11,6 +11,23 @@ it runs.
 
 ## Install
 
+**One command, any platform** — this is the one to hand people. It installs
+through Homebrew, apt or dnf if the machine has one, falls back to a static
+binary if it does not, then asks for your publisher id and starts the service.
+
+```bash
+curl -fsSL https://meerkly.com/install | sh
+```
+
+Non-interactively, or to skip the service:
+
+```bash
+curl -fsSL https://meerkly.com/install | sh -s -- --id pub_your_publisher_id
+curl -fsSL https://meerkly.com/install | sh -s -- --help
+```
+
+Or reach for a package manager directly:
+
 **Homebrew** (macOS, Linux)
 
 ```bash
@@ -20,19 +37,13 @@ brew install meerkly/tap/meerkly
 **Debian / Ubuntu**
 
 ```bash
-sudo apt install ./meerkly_1.0.0_amd64.deb
+sudo apt install ./meerkly_1.1.0_amd64.deb
 ```
 
 **Fedora / RHEL**
 
 ```bash
-sudo dnf install ./meerkly-1.0.0.x86_64.rpm
-```
-
-**One-liner** (downloads, configures and starts)
-
-```bash
-curl -fsSL https://meerkly.com/install | sh
+sudo dnf install ./meerkly-1.1.0-1.x86_64.rpm
 ```
 
 **From source**

@@ -1,0 +1,37 @@
+name: Sync install.sh to meerkly.com
+
+# meerkly.com serves this repo's packaging/install.sh — it keeps a vendored copy
+# because its Docker build context is that repo alone and cannot reach a sibling
+# checkout. Tell it when the script changes so it re-vendors and opens a PR,
+# rather than waiting up to a day for its cron to notice.
+#
+# Its CI also diffs the vendored copy against this repo's main, so a change here
+# turns meerkly-com red until that PR merges. That is deliberate: the script the
+# site hands out should never be one nobody here has seen.
+on:
+  push:
+    branches: [main]
+    paths: ["packaging/install.sh"]
+  workflow_dispatch:
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ask meerkly-com to re-vendor
+        env:
+          # A PAT with `repo` scope on meerkly/meerkly-com. GITHUB_TOKEN cannot
+          # dispatch across repositories, so this has to be its own secret.
+          TOKEN: ${{ secrets.SITE_SYNC_TOKEN }}
+        run: |
+          if [ -z "${TOKEN:-}" ]; then
+            echo "::warning::SITE_SYNC_TOKEN is not set, so meerkly-com was not notified. Its daily cron will pick this up within 24h. Add a PAT with 'repo' scope on meerkly/meerkly-com to make it immediate."
+            exit 0
+          fi
+          curl -fsS -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/meerkly/meerkly-com/dispatches \
+            -d '{"event_type":"sync-install"}'
+          echo "Asked meerkly-com to re-vendor install.sh."
