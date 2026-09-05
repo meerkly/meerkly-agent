@@ -246,8 +246,9 @@ esac
 if [ ! -x "$MEERKLY" ]; then
   MEERKLY=$(command -v meerkly 2>/dev/null || true)
 fi
-[ -n "$MEERKLY" ] && [ -x "$MEERKLY" ] \
-  || die "installed, but no meerkly binary was found afterwards. Open a shell and try: meerkly init $PUBLISHER_ID"
+if [ -z "$MEERKLY" ] || [ ! -x "$MEERKLY" ]; then
+  die "installed, but no meerkly binary was found afterwards. Open a shell and try: meerkly init $PUBLISHER_ID"
+fi
 
 # ---- configure and start -----------------------------------------------------
 
