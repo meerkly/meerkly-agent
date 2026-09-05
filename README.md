@@ -44,13 +44,13 @@ brew install meerkly/tap/meerkly
 **Debian / Ubuntu**
 
 ```bash
-sudo apt install ./meerkly_1.1.0_amd64.deb
+sudo apt install ./meerkly_1.2.0_amd64.deb
 ```
 
 **Fedora / RHEL**
 
 ```bash
-sudo dnf install ./meerkly-1.1.0-1.x86_64.rpm
+sudo dnf install ./meerkly-1.2.0-1.x86_64.rpm
 ```
 
 **From source**
