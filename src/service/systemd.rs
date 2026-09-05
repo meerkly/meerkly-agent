@@ -31,15 +31,15 @@ impl Manager {
     /// `$SUDO_USER` is the whole question — installing as root and leaving
     /// `User=root` would put the config in `/root` where neither the desktop app
     /// nor the person who installed it can reach it.
-    fn target_user() -> Result<(String, String)> {
+    fn target_user() -> Result<(String, crate::paths::PasswdEntry)> {
         let user = std::env::var("SUDO_USER")
             .ok()
             .filter(|u| !u.is_empty() && u != "root")
             .or_else(|| std::env::var("USER").ok())
             .filter(|u| !u.is_empty())
             .context("cannot tell which user the service should run as; pass `--user <name>`")?;
-        let home = home_of(&user)?;
-        Ok((user, home))
+        let entry = crate::paths::passwd_entry(&user)?;
+        Ok((user, entry))
     }
 
     pub fn for_user(user: &str) -> Result<Self> {
@@ -89,19 +89,23 @@ WantedBy=multi-user.target
 }
 
 fn home_of(user: &str) -> Result<String> {
-    let entry = run_command("getent", &["passwd", user])
-        .with_context(|| format!("no such user: {user}"))?;
-    entry
-        .split(':')
-        .nth(5)
-        .filter(|h| !h.is_empty())
-        .map(str::to_owned)
-        .with_context(|| format!("user {user} has no home directory"))
+    crate::paths::passwd_entry(user).map(|e| e.home)
 }
 
 impl ServiceManager for Manager {
     fn install(&self) -> Result<()> {
-        let (user, home) = Manager::target_user()?;
+        let (user, entry) = Manager::target_user()?;
+        let home = entry.home.clone();
+
+        // The unit below lists these in ReadWritePaths=, and systemd will not
+        // start a unit whose ReadWritePaths= do not exist — it fails namespace
+        // setup with status 226 before ExecStart is ever reached. The state
+        // directory is normally created by the daemon on first run, which is
+        // exactly the run that cannot happen. So make both here, as the user's.
+        for rel in [".config/meerkly", ".local/state/meerkly"] {
+            crate::paths::create_dir_for(&Path::new(&home).join(rel), &entry, &user)?;
+        }
+
         let exe = binary_path()?;
         let text = Manager::unit_text(&user, &home, &exe);
 

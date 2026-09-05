@@ -4,6 +4,13 @@
 # apt/dnf run this as root; $SUDO_USER is how we recover who that actually was.
 set -e
 
+# The meerkly.com installer drives the whole first run itself and sets this. It
+# is about to store the id and register the service; instructions printed from
+# inside apt telling the person to do that by hand would only confuse.
+if [ -n "${MEERKLY_INSTALLER:-}" ]; then
+  exit 0
+fi
+
 TARGET_USER="${SUDO_USER:-}"
 
 if [ -z "$TARGET_USER" ] || [ "$TARGET_USER" = "root" ]; then

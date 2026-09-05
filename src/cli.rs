@@ -73,6 +73,16 @@ pub enum Command {
         json: bool,
     },
 
+    /// Show the most recent log lines.
+    ///
+    /// Reads the agent's own log files, so it works the same on every platform
+    /// and needs no journal permissions. Seven days are kept.
+    Logs {
+        /// How many lines, oldest first. 0 prints everything kept.
+        #[arg(short = 'n', long = "lines", default_value_t = 20, value_name = "N")]
+        lines: usize,
+    },
+
     /// Read and write the configuration file.
     #[command(subcommand)]
     Config(ConfigCommand),
@@ -112,4 +122,28 @@ pub enum ConfigCommand {
         #[arg(long)]
         restart: bool,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(args: &[&str]) -> Command {
+        Cli::try_parse_from(std::iter::once("meerkly").chain(args.iter().copied()))
+            .expect("parses")
+            .command
+    }
+
+    #[test]
+    fn logs_shows_twenty_lines_unless_told_otherwise() {
+        assert!(matches!(parse(&["logs"]), Command::Logs { lines: 20 }));
+        assert!(matches!(
+            parse(&["logs", "-n", "500"]),
+            Command::Logs { lines: 500 }
+        ));
+        assert!(matches!(
+            parse(&["logs", "--lines", "0"]),
+            Command::Logs { lines: 0 }
+        ));
+    }
 }

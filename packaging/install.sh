@@ -201,8 +201,12 @@ case "$METHOD" in
     # apt-get takes a local path directly and pulls in dependencies; dpkg is the
     # fallback for the older apt on long-lived LTS boxes, with a follow-up fix
     # for anything it could not resolve on its own.
-    $SUDO apt-get install -y "$tmp/$asset" 2>/dev/null \
-      || { $SUDO dpkg -i "$tmp/$asset" || true; $SUDO apt-get install -f -y; }
+    # MEERKLY_INSTALLER tells the package's postinstall that this script is
+    # driving the first run, so it does not print its own "now run sudo meerkly
+    # init" — a second set of instructions in the middle of an install that is
+    # about to do exactly that would only confuse.
+    $SUDO env MEERKLY_INSTALLER=1 apt-get install -y "$tmp/$asset" 2>/dev/null \
+      || { $SUDO env MEERKLY_INSTALLER=1 dpkg -i "$tmp/$asset" || true; $SUDO env MEERKLY_INSTALLER=1 apt-get install -f -y; }
     MEERKLY=/usr/bin/meerkly
     ;;
 
@@ -210,8 +214,8 @@ case "$METHOD" in
     asset="meerkly-${VERSION}-1.${rpm_arch}.rpm"
     fetch_asset "$asset" "$tmp/$asset"
     info "installing with dnf…"
-    if have dnf; then $SUDO dnf install -y "$tmp/$asset"
-    else $SUDO yum localinstall -y "$tmp/$asset"
+    if have dnf; then $SUDO env MEERKLY_INSTALLER=1 dnf install -y "$tmp/$asset"
+    else $SUDO env MEERKLY_INSTALLER=1 yum localinstall -y "$tmp/$asset"
     fi
     MEERKLY=/usr/bin/meerkly
     ;;
@@ -258,19 +262,23 @@ fi
 
 # ---- configure and start -----------------------------------------------------
 
-# `init` is the agent's own one-command setup: it stores the id and registers
-# the service. Using it here rather than reimplementing either step means this
-# script cannot drift from what `meerkly init` does.
+# Two steps, deliberately as two different people. The id is stored by *you*,
+# so the config file lands in your home, owned by you, and never needs sudo to
+# edit. The service is then registered by root — and runs as you, because sudo
+# tells it who you are. Doing both under one `sudo` is how a root-owned config
+# ends up in a home directory.
+"$MEERKLY" login "$PUBLISHER_ID"
+
 if [ "$INSTALL_SERVICE" = "1" ]; then
   if [ "$os" = "Linux" ] && [ "$(id -u)" != "0" ] && have sudo; then
-    # Registering a system unit needs root. The service still runs as the user
-    # who installed it, which is why the config stays in that user's home.
-    sudo -E "$MEERKLY" init "$PUBLISHER_ID"
+    # -E keeps $HOME pointing at your config for the pre-flight check.
+    sudo -E "$MEERKLY" service install
   else
-    "$MEERKLY" init "$PUBLISHER_ID"
+    "$MEERKLY" service install
   fi
 else
-  "$MEERKLY" init "$PUBLISHER_ID" --no-service
+  say ""
+  say "Start it when you are ready:  sudo meerkly service install"
 fi
 
 say ""

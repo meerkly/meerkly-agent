@@ -27,6 +27,8 @@ path = "src/main.rs"
 [dependencies]
 meerkly-sdk = "0.5"
 anyhow = "1"
+# geteuid, to tell a `sudo meerkly init` apart from a plain one.
+libc = "0.2"
 clap = { version = "4", features = ["derive"] }
 directories = "6"
 # The persistent device id and the hostname that seeds its dashboard label.
@@ -38,6 +40,9 @@ tokio = { version = "1", features = ["full"] }
 toml = "0.9"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# The daemon keeps its own daily-rotated log files, so `meerkly logs` works the
+# same on every platform and needs no journal permissions.
+tracing-appender = "0.2"
 
 [dev-dependencies]
 tempfile = "3"

@@ -90,9 +90,21 @@ The service is registered with your platform's own service manager, so use that 
 
 ```bash
 systemctl start|stop|status meerkly     # Linux
-journalctl -u meerkly -f                # Linux logs
+journalctl -u meerkly -f                # Linux logs, live
 brew services start|stop meerkly        # macOS via Homebrew
 ```
+
+Logs are the same on every platform:
+
+```bash
+meerkly logs             # the last 20 lines
+meerkly logs -n 200      # more; -n 0 for everything kept
+```
+
+The daemon writes one file a day and keeps seven, under
+`~/.local/state/meerkly/logs/` on Linux and
+`~/Library/Application Support/meerkly/logs/` on macOS. It also writes to
+stderr, which is what the journal and launchd capture.
 
 `meerkly start|stop|restart` does the same thing on all three platforms — one command shape for
 scripts and for the desktop app.

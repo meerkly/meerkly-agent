@@ -40,6 +40,7 @@ fn main() -> Result<()> {
             m.start().context("cannot start the service")
         }
         Command::Status { json } => cmd_status(json),
+        Command::Logs { lines } => cmd_logs(lines),
         Command::Config(c) => cmd_config(c),
     }
 }
@@ -90,8 +91,37 @@ fn save_publisher_id(id: Option<String>) -> Result<std::path::PathBuf> {
 
     config.publisher_id = Some(id.clone());
     config.save(&path)?;
+    // Under `sudo meerkly init` the file was just written by root into the
+    // human's home. Give it back, or they can never edit it again.
+    paths::adopt_for_sudo_user(&path)?;
     println!("publisher id {id} stored in {}", path.display());
     Ok(path)
+}
+
+/// What one line typed at the prompt means.
+#[derive(Debug, PartialEq, Eq)]
+enum Answer {
+    /// Nothing typed and there is a current id: keep it, as an empty answer at
+    /// a `[default]` prompt means everywhere else.
+    Keep,
+    Use(String),
+    /// Ask again, saying why.
+    Retry(String),
+}
+
+fn interpret_answer(line: &str, current: Option<&str>) -> Answer {
+    if line.trim().is_empty() {
+        return match current {
+            Some(_) => Answer::Keep,
+            None => {
+                Answer::Retry("nothing entered — paste your publisher id, or Ctrl-C to stop".into())
+            }
+        };
+    }
+    match config::validate_publisher_id(line) {
+        Ok(id) => Answer::Use(id),
+        Err(e) => Answer::Retry(e.to_string()),
+    }
 }
 
 /// Ask for the id, re-asking on a typo rather than making the user start over.
@@ -109,21 +139,28 @@ fn prompt_for_publisher_id(current: Option<&str>) -> Result<String> {
     );
 
     println!("Find your publisher id at https://dashboard.meerkly.com");
-    if let Some(current) = current {
-        println!("Currently configured: {current}");
-    }
 
     loop {
-        print!("publisher id (pub_…): ");
+        // The current id is the default, shown in brackets the way every other
+        // prompt does it; Enter keeps it.
+        match current {
+            Some(c) => print!("publisher id [{c}]: "),
+            None => print!("publisher id (pub_…): "),
+        }
         std::io::stdout().flush()?;
 
         let mut line = String::new();
         if std::io::stdin().read_line(&mut line)? == 0 {
             anyhow::bail!("cancelled — nothing was changed");
         }
-        match config::validate_publisher_id(&line) {
-            Ok(id) => return Ok(id),
-            Err(e) => eprintln!("  {e}\n"),
+        match interpret_answer(&line, current) {
+            Answer::Keep => {
+                let c = current.expect("Keep only occurs with a current id");
+                println!("keeping {c}");
+                return Ok(c.to_owned());
+            }
+            Answer::Use(id) => return Ok(id),
+            Answer::Retry(why) => eprintln!("  {why}\n"),
         }
     }
 }
@@ -155,12 +192,103 @@ fn cmd_run(publisher_id: Option<String>, gateway: Option<String>) -> Result<()> 
 
 /// `MEERKLY_LOG` — the filter variable the rest of meerkly already uses — then
 /// the config file's `log`, then `info`.
+///
+/// Output goes two places: stderr, which is what systemd's journal and launchd's
+/// StandardErrorPath capture, and the daemon's own daily-rotated files under
+/// `paths::log_dir()`, which is what `meerkly logs` reads — the same on every
+/// platform, and with no journal permissions needed. If the log directory cannot
+/// be made the daemon still runs, on stderr alone; a proxy exit that refuses to
+/// start over a log file is the wrong trade.
 fn init_logging(configured: Option<&str>) {
+    use tracing_subscriber::fmt::writer::MakeWriterExt;
     use tracing_subscriber::EnvFilter;
+
     let filter = EnvFilter::try_from_env("MEERKLY_LOG")
         .or_else(|_| EnvFilter::try_new(configured.unwrap_or("info")))
         .unwrap_or_else(|_| EnvFilter::new("info"));
-    tracing_subscriber::fmt().with_env_filter(filter).init();
+
+    match log_file_appender() {
+        Ok(files) => tracing_subscriber::fmt()
+            .with_env_filter(filter)
+            .with_ansi(false)
+            .with_writer(std::io::stderr.and(files))
+            .init(),
+        Err(e) => {
+            tracing_subscriber::fmt()
+                .with_env_filter(filter)
+                .with_ansi(false)
+                .with_writer(std::io::stderr)
+                .init();
+            tracing::warn!("not writing log files: {e:#}");
+        }
+    }
+}
+
+/// One file per day under the log directory, `meerkly.YYYY-MM-DD.log`, the
+/// newest seven kept. The date is in the name so `meerkly logs` can order them
+/// with a plain sort.
+fn log_file_appender() -> Result<tracing_appender::rolling::RollingFileAppender> {
+    let dir = paths::log_dir()?;
+    std::fs::create_dir_all(&dir).with_context(|| format!("cannot create {}", dir.display()))?;
+    tracing_appender::rolling::RollingFileAppender::builder()
+        .rotation(tracing_appender::rolling::Rotation::DAILY)
+        .filename_prefix("meerkly")
+        .filename_suffix("log")
+        .max_log_files(7)
+        .build(&dir)
+        .with_context(|| format!("cannot open a log file in {}", dir.display()))
+}
+
+// ---- logs ------------------------------------------------------------------
+
+/// The last `lines` lines the daemon wrote, oldest first; 0 means all of them.
+fn cmd_logs(lines: usize) -> Result<()> {
+    let dir = paths::log_dir()?;
+    let mut files: Vec<std::path::PathBuf> = match std::fs::read_dir(&dir) {
+        Ok(entries) => entries
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.starts_with("meerkly.") && n.ends_with(".log"))
+            })
+            .collect(),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(e) => return Err(e).with_context(|| format!("cannot read {}", dir.display())),
+    };
+    if files.is_empty() {
+        println!("No log yet — the agent has not run on this machine.");
+        println!("  {}", manager(None)?.native_hint());
+        println!("  Start it with:  meerkly start");
+        return Ok(());
+    }
+    // Dates in the names sort chronologically; newest first for the tail.
+    files.sort();
+    files.reverse();
+
+    let newest_first = files.iter().filter_map(|p| std::fs::read_to_string(p).ok());
+    for line in tail_across(newest_first, lines) {
+        println!("{line}");
+    }
+    Ok(())
+}
+
+/// The last `n` lines across files given newest-first, returned oldest-first.
+/// Stops reading as soon as it has enough, so `-n 20` does not load a week.
+/// `n == 0` means every line.
+fn tail_across(newest_first: impl Iterator<Item = String>, n: usize) -> Vec<String> {
+    let mut picked: Vec<String> = Vec::new();
+    for file in newest_first {
+        let mut lines: Vec<String> = file.lines().map(str::to_owned).collect();
+        lines.extend(picked);
+        picked = lines;
+        if n != 0 && picked.len() >= n {
+            let cut = picked.len() - n;
+            picked.drain(..cut);
+            break;
+        }
+    }
+    picked
 }
 
 // ---- service ---------------------------------------------------------------
@@ -354,4 +482,78 @@ fn unknown_key(key: &str) -> String {
         "unknown configuration key {key:?} — expected one of: publisher-id, gateway-addresses, \
          ca-cert-path, log"
     )
+}
+
+#[cfg(test)]
+mod prompt_tests {
+    use super::*;
+
+    #[test]
+    fn enter_keeps_the_current_id() {
+        assert_eq!(interpret_answer("\n", Some("pub_abc")), Answer::Keep);
+        assert_eq!(interpret_answer("   ", Some("pub_abc")), Answer::Keep);
+    }
+
+    #[test]
+    fn enter_with_nothing_configured_asks_again_and_says_so() {
+        match interpret_answer("\n", None) {
+            Answer::Retry(why) => assert!(why.contains("nothing entered"), "{why}"),
+            other => panic!("expected a retry, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_typed_id_replaces_the_current_one() {
+        assert_eq!(
+            interpret_answer(" pub_new1 \n", Some("pub_old")),
+            Answer::Use("pub_new1".into())
+        );
+    }
+
+    #[test]
+    fn a_typo_asks_again_with_the_validation_message() {
+        match interpret_answer("pob_x\n", Some("pub_old")) {
+            Answer::Retry(why) => assert!(why.contains("pub_"), "{why}"),
+            other => panic!("expected a retry, got {other:?}"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod logs_tests {
+    use super::*;
+
+    fn files<'a>(newest_first: &'a [&'a str]) -> impl Iterator<Item = String> + 'a {
+        newest_first.iter().map(|f| f.to_string())
+    }
+
+    #[test]
+    fn the_tail_spans_files_and_comes_out_oldest_first() {
+        let got = tail_across(files(&["d\ne\n", "a\nb\nc\n"]), 3);
+        assert_eq!(got, ["c", "d", "e"]);
+    }
+
+    #[test]
+    fn asking_for_more_than_exists_gives_everything() {
+        let got = tail_across(files(&["c\n", "a\nb\n"]), 50);
+        assert_eq!(got, ["a", "b", "c"]);
+    }
+
+    #[test]
+    fn zero_means_all() {
+        let got = tail_across(files(&["c\n", "a\nb\n"]), 0);
+        assert_eq!(got, ["a", "b", "c"]);
+    }
+
+    #[test]
+    fn stops_reading_once_it_has_enough() {
+        // The older file is never touched: it is not needed for two lines.
+        let mut touched = 0;
+        let newest_first = ["y\nz\n", "a\n"].into_iter().map(|f| {
+            touched += 1;
+            f.to_string()
+        });
+        assert_eq!(tail_across(newest_first, 2), ["y", "z"]);
+        assert_eq!(touched, 1);
+    }
 }
