@@ -8,7 +8,7 @@ jobs:
   # Lint and test on one runner; the cross-platform question is "does it build",
   # answered by the matrix below.
   check:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -19,17 +19,19 @@ jobs:
       - run: cargo test
 
   # Every target a release ships. A packaging change that breaks one platform
-  # should fail here, not at tag time.
+  # should fail here, not at tag time. Everything but macOS builds on Linux —
+  # the self-hosted pool when LINUX_RUNNER is set — so only macOS needs a
+  # hosted runner.
   build:
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { runner: ubuntu-latest, target: x86_64-unknown-linux-musl }
-          - { runner: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl }
-          - { runner: macos-14, target: aarch64-apple-darwin }
-          - { runner: macos-14, target: x86_64-apple-darwin }
-          - { runner: windows-latest, target: x86_64-pc-windows-msvc }
+          - { runner: "${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}", target: x86_64-unknown-linux-musl,  cross: "" }
+          - { runner: "${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}", target: aarch64-unknown-linux-musl, cross: zigbuild }
+          - { runner: "${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}", target: x86_64-pc-windows-msvc,     cross: xwin }
+          - { runner: macos-14, target: aarch64-apple-darwin, cross: "" }
+          - { runner: macos-14, target: x86_64-apple-darwin,  cross: "" }
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -37,14 +39,40 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - name: musl toolchain
-        if: contains(matrix.target, 'musl')
+        if: matrix.cross == '' && contains(matrix.target, 'musl')
         run: sudo apt-get update && sudo apt-get install -y musl-tools
-      - run: cargo build --release --target ${{ matrix.target }}
+      # arm64 Linux and Windows are cross-compiled from amd64 Linux, so they run
+      # on the self-hosted pool rather than on hosted arm64/Windows runners.
+      # zig is the C toolchain for ring's arm64 build; cargo-xwin fetches the
+      # MSVC CRT and Windows SDK and links with clang/lld.
+      - name: zig + cargo-zigbuild
+        if: matrix.cross == 'zigbuild'
+        run: |
+          command -v xz >/dev/null || { sudo apt-get update && sudo apt-get install -y xz-utils; }
+          curl -sSfL "https://ziglang.org/download/${ZIG}/zig-linux-x86_64-${ZIG}.tar.xz" | tar -xJ -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/zig-linux-x86_64-${ZIG}" >> "$GITHUB_PATH"
+          cargo install --locked cargo-zigbuild
+        env:
+          ZIG: 0.13.0
+      - name: clang + cargo-xwin
+        if: matrix.cross == 'xwin'
+        run: |
+          sudo apt-get update && sudo apt-get install -y clang lld llvm
+          cargo install --locked cargo-xwin
+      - name: build
+        env:
+          XWIN_ACCEPT_LICENSE: "1"
+        run: |
+          case "${{ matrix.cross }}" in
+            zigbuild) cargo zigbuild --release --target ${{ matrix.target }} ;;
+            xwin)     cargo xwin build --release --target ${{ matrix.target }} ;;
+            *)        cargo build --release --target ${{ matrix.target }} ;;
+          esac
 
   # The installer is a shipped artifact; a syntax error in it is a broken
   # `curl … | sh` for everyone.
   installer:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y shellcheck

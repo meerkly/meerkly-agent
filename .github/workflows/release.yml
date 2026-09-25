@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   version:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
     outputs:
       version: ${{ steps.v.outputs.version }}
     steps:
@@ -33,15 +33,18 @@ jobs:
 
   build:
     needs: version
+    # Everything but macOS is built on Linux (the self-hosted pool when
+    # LINUX_RUNNER is set): arm64 Linux and Windows are cross-compiled, so a
+    # release needs hosted runners for the two macOS targets only.
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { runner: ubuntu-latest,    target: x86_64-unknown-linux-musl,  arch: amd64 }
-          - { runner: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl, arch: arm64 }
-          - { runner: macos-14,         target: aarch64-apple-darwin }
-          - { runner: macos-14,         target: x86_64-apple-darwin }
-          - { runner: windows-latest,   target: x86_64-pc-windows-msvc }
+          - { runner: "${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}", target: x86_64-unknown-linux-musl,  arch: amd64, cross: "" }
+          - { runner: "${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}", target: aarch64-unknown-linux-musl, arch: arm64, cross: zigbuild }
+          - { runner: "${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}", target: x86_64-pc-windows-msvc,     cross: xwin }
+          - { runner: macos-14, target: aarch64-apple-darwin, cross: "" }
+          - { runner: macos-14, target: x86_64-apple-darwin,  cross: "" }
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -49,15 +52,43 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - name: musl toolchain
-        if: contains(matrix.target, 'musl')
+        if: matrix.cross == '' && contains(matrix.target, 'musl')
         run: sudo apt-get update && sudo apt-get install -y musl-tools
-      - run: cargo build --release --target ${{ matrix.target }}
+      # arm64 Linux and Windows are cross-compiled from amd64 Linux, so they run
+      # on the self-hosted pool rather than on hosted arm64/Windows runners.
+      # zig is the C toolchain for ring's arm64 build; cargo-xwin fetches the
+      # MSVC CRT and Windows SDK and links with clang/lld.
+      - name: zig + cargo-zigbuild
+        if: matrix.cross == 'zigbuild'
+        run: |
+          command -v xz >/dev/null || { sudo apt-get update && sudo apt-get install -y xz-utils; }
+          curl -sSfL "https://ziglang.org/download/${ZIG}/zig-linux-x86_64-${ZIG}.tar.xz" | tar -xJ -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/zig-linux-x86_64-${ZIG}" >> "$GITHUB_PATH"
+          cargo install --locked cargo-zigbuild
+        env:
+          ZIG: 0.13.0
+      - name: clang + cargo-xwin
+        if: matrix.cross == 'xwin'
+        run: |
+          sudo apt-get update && sudo apt-get install -y clang lld llvm
+          cargo install --locked cargo-xwin
+      - name: build
+        env:
+          XWIN_ACCEPT_LICENSE: "1"
+        run: |
+          case "${{ matrix.cross }}" in
+            zigbuild) cargo zigbuild --release --target ${{ matrix.target }} ;;
+            xwin)     cargo xwin build --release --target ${{ matrix.target }} ;;
+            *)        cargo build --release --target ${{ matrix.target }} ;;
+          esac
 
       - name: stage the binary
         shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
         run: |
           mkdir -p dist
-          if [ "${{ runner.os }}" = "Windows" ]; then
+          if [[ "$TARGET" == *windows* ]]; then
             cp "target/${{ matrix.target }}/release/meerkly.exe" dist/
           else
             cp "target/${{ matrix.target }}/release/meerkly" dist/
@@ -65,10 +96,13 @@ jobs:
 
       - name: archive
         shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
         run: |
           V="${{ needs.version.outputs.version }}"
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            7z a "meerkly-$V-${{ matrix.target }}.zip" ./dist/meerkly.exe
+          if [[ "$TARGET" == *windows* ]]; then
+            command -v zip >/dev/null || { sudo apt-get update && sudo apt-get install -y zip; }
+            zip -j "meerkly-$V-${{ matrix.target }}.zip" dist/meerkly.exe
           else
             tar -czf "meerkly-$V-${{ matrix.target }}.tar.gz" -C dist meerkly
           fi
@@ -102,7 +136,7 @@ jobs:
 
   publish:
     needs: [version, build]
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -127,7 +161,7 @@ jobs:
   # bakes in describe artifacts that actually exist.
   homebrew:
     needs: [version, publish]
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - name: render the formula
@@ -171,7 +205,7 @@ jobs:
   # published SDK really is consumable from crates.io with no local checkout.
   crates-io:
     needs: [version, build]
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
