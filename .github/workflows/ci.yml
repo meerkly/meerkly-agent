@@ -1,5 +1,9 @@
 name: ci
 
+# This repo is public, so every job runs on GitHub-hosted runners, which are
+# free here. Never point a job at the self-hosted pool: a pull request from a
+# fork runs its own code on whatever runner the job names.
+
 on:
   push:
   pull_request:
@@ -8,7 +12,7 @@ jobs:
   # Lint and test on one runner; the cross-platform question is "does it build",
   # answered by the matrix below.
   check:
-    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -19,17 +23,15 @@ jobs:
       - run: cargo test
 
   # Every target a release ships. A packaging change that breaks one platform
-  # should fail here, not at tag time. Everything but macOS builds on Linux —
-  # the self-hosted pool when LINUX_RUNNER is set — so only macOS needs a
-  # hosted runner.
+  # should fail here, not at tag time. Everything but macOS builds on Linux.
   build:
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { runner: "${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}", target: x86_64-unknown-linux-musl,  cross: "" }
-          - { runner: "${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}", target: aarch64-unknown-linux-musl, cross: zigbuild }
-          - { runner: "${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}", target: x86_64-pc-windows-msvc,     cross: xwin }
+          - { runner: ubuntu-latest, target: x86_64-unknown-linux-musl,  cross: "" }
+          - { runner: ubuntu-latest, target: aarch64-unknown-linux-musl, cross: zigbuild }
+          - { runner: ubuntu-latest, target: x86_64-pc-windows-msvc,     cross: xwin }
           - { runner: macos-14, target: aarch64-apple-darwin, cross: "" }
           - { runner: macos-14, target: x86_64-apple-darwin,  cross: "" }
     runs-on: ${{ matrix.runner }}
@@ -41,8 +43,7 @@ jobs:
       - name: musl toolchain
         if: matrix.cross == '' && contains(matrix.target, 'musl')
         run: sudo apt-get update && sudo apt-get install -y musl-tools
-      # arm64 Linux and Windows are cross-compiled from amd64 Linux, so they run
-      # on the self-hosted pool rather than on hosted arm64/Windows runners.
+      # arm64 Linux and Windows are cross-compiled from amd64 Linux.
       # zig is the C toolchain for ring's arm64 build; cargo-xwin fetches the
       # MSVC CRT and Windows SDK and links with clang/lld.
       - name: zig + cargo-zigbuild
@@ -72,7 +73,7 @@ jobs:
   # The installer is a shipped artifact; a syntax error in it is a broken
   # `curl … | sh` for everyone.
   installer:
-    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y shellcheck

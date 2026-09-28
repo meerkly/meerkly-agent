@@ -1,5 +1,9 @@
 name: release
 
+# This repo is public, so every job runs on GitHub-hosted runners, which are
+# free here. Never point a job at the self-hosted pool: a pull request from a
+# fork runs its own code on whatever runner the job names.
+
 # Cut a release by pushing a tag `v<X.Y.Z>` matching the version in Cargo.toml.
 # The same discipline the monorepo uses for SDK releases: one version, checked
 # against the tag, so a release can never claim a number the code does not carry.
@@ -13,7 +17,7 @@ permissions:
 
 jobs:
   version:
-    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.v.outputs.version }}
     steps:
@@ -33,16 +37,15 @@ jobs:
 
   build:
     needs: version
-    # Everything but macOS is built on Linux (the self-hosted pool when
-    # LINUX_RUNNER is set): arm64 Linux and Windows are cross-compiled, so a
-    # release needs hosted runners for the two macOS targets only.
+    # Everything but macOS is built on Linux: arm64 Linux and Windows are
+    # cross-compiled from amd64.
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { runner: "${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}", target: x86_64-unknown-linux-musl,  arch: amd64, cross: "" }
-          - { runner: "${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}", target: aarch64-unknown-linux-musl, arch: arm64, cross: zigbuild }
-          - { runner: "${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}", target: x86_64-pc-windows-msvc,     cross: xwin }
+          - { runner: ubuntu-latest, target: x86_64-unknown-linux-musl,  arch: amd64, cross: "" }
+          - { runner: ubuntu-latest, target: aarch64-unknown-linux-musl, arch: arm64, cross: zigbuild }
+          - { runner: ubuntu-latest, target: x86_64-pc-windows-msvc,     cross: xwin }
           - { runner: macos-14, target: aarch64-apple-darwin, cross: "" }
           - { runner: macos-14, target: x86_64-apple-darwin,  cross: "" }
     runs-on: ${{ matrix.runner }}
@@ -54,8 +57,7 @@ jobs:
       - name: musl toolchain
         if: matrix.cross == '' && contains(matrix.target, 'musl')
         run: sudo apt-get update && sudo apt-get install -y musl-tools
-      # arm64 Linux and Windows are cross-compiled from amd64 Linux, so they run
-      # on the self-hosted pool rather than on hosted arm64/Windows runners.
+      # arm64 Linux and Windows are cross-compiled from amd64 Linux.
       # zig is the C toolchain for ring's arm64 build; cargo-xwin fetches the
       # MSVC CRT and Windows SDK and links with clang/lld.
       - name: zig + cargo-zigbuild
@@ -136,7 +138,7 @@ jobs:
 
   publish:
     needs: [version, build]
-    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -161,7 +163,7 @@ jobs:
   # bakes in describe artifacts that actually exist.
   homebrew:
     needs: [version, publish]
-    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: render the formula
@@ -205,7 +207,7 @@ jobs:
   # published SDK really is consumable from crates.io with no local checkout.
   crates-io:
     needs: [version, build]
-    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
