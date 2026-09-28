@@ -189,13 +189,14 @@ cargo run -- run
 ```
 
 The agent depends on [`meerkly-sdk`](https://crates.io/crates/meerkly-sdk) from crates.io. To
-work on the SDK and the agent together, check out the monorepo as a sibling directory and add a
+work on the SDK and the agent together, check out
+[`meerkly/meerkly-sdk`](https://github.com/meerkly/meerkly-sdk) as a sibling directory and add a
 local override — `.cargo/` is gitignored, so this never reaches a release:
 
 ```toml
 # .cargo/config.toml
 [patch.crates-io]
-meerkly-sdk = { path = "../meerkly/crates/client-core" }
+meerkly-sdk = { path = "../meerkly-sdk/crates/client-core" }
 ```
 
 To test against a local gateway rather than production:
