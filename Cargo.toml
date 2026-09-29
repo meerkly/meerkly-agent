@@ -6,7 +6,7 @@
 # the monorepo's Cargo workspace, this is a product with its own release cadence.
 [package]
 name = "meerkly"
-version = "1.3.0"
+version = "1.3.1"
 edition = "2021"
 description = "The meerkly agent — a background service that shares this machine's connection as a proxy exit node and earns per GB."
 authors = ["Meerkly"]
@@ -25,7 +25,7 @@ name = "meerkly"
 path = "src/main.rs"
 
 [dependencies]
-meerkly-sdk = "1.1"
+meerkly-sdk = "1.2"
 anyhow = "1"
 # geteuid, to tell a `sudo meerkly init` apart from a plain one.
 libc = "0.2"
